@@ -24,6 +24,26 @@ dirs:
       - name: ".gitkeep"
         content: ""
 
+  - path: ".github"
+    files:
+      - name: "dependabot.yml"
+        content: |
+          version: 2
+          updates:
+            - package-ecosystem: gomod
+              directory: /
+              schedule:
+                interval: weekly
+              commit-message:
+                prefix: deps
+
+            - package-ecosystem: github-actions
+              directory: /
+              schedule:
+                interval: weekly
+              commit-message:
+                prefix: ci
+
   - path: ".github/workflows"
     files:
       - name: "ci.yml"
@@ -45,6 +65,40 @@ dirs:
                     go-version-file: go.mod
                 - name: gofmt, vet and tests
                   run: make check
+
+      - name: "dependabot-automerge.yml"
+        raw: true # contains GitHub Actions ${{ }} expressions, which must not be templated by ri
+        content: |
+          name: Dependabot auto-merge
+
+          # Turns on auto-merge for Dependabot's patch and minor updates. GitHub then merges the pull request
+          # once the required "check" job from ci.yml passes; major updates are left for a human to review.
+          # Needs "Allow auto-merge" enabled and a branch protection rule on main requiring the "check" status,
+          # otherwise there is nothing to wait for (see the README).
+
+          on: pull_request
+
+          permissions:
+            contents: write
+            pull-requests: write
+
+          jobs:
+            automerge:
+              runs-on: ubuntu-latest
+              if: github.event.pull_request.user.login == 'dependabot[bot]'
+              steps:
+                - name: Fetch Dependabot metadata
+                  id: metadata
+                  uses: dependabot/fetch-metadata@v2
+                  with:
+                    github-token: ${{ secrets.GITHUB_TOKEN }}
+
+                - name: Enable auto-merge for patch and minor updates
+                  if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+                  run: gh pr merge --auto --squash "$PR_URL"
+                  env:
+                    PR_URL: ${{ github.event.pull_request.html_url }}
+                    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   - path: "./"
     files:
@@ -96,6 +150,15 @@ dirs:
           make check   # gofmt, vet and tests (what CI runs)
           ```
 
+          ## Dependency updates
+
+          Dependabot opens weekly pull requests for Go modules and GitHub Actions. Patch and minor updates
+          are merged automatically once CI passes; major updates wait for review. To turn this on:
+
+          1. Enable auto-merge: `gh repo edit --enable-auto-merge`
+          2. Require the `check` job on `main` (Settings > Branches > Branch protection rule > "Require status
+             checks to pass"). Without it there is nothing to wait for, and auto-merge cannot work.
+
       - name: "CLAUDE.md"
         content: |
           # CLAUDE.md
@@ -118,6 +181,7 @@ dirs:
           - `internal/`: private packages, not importable by other modules
           - `pkg/`: packages intended to be imported by other modules
           - `.github/workflows/ci.yml`: CI, runs `make check` on pushes to `main` and on pull requests
+          - `.github/dependabot.yml` and `.github/workflows/dependabot-automerge.yml`: weekly dependency updates; patch and minor ones auto-merge once CI passes. This needs "Allow auto-merge" and a branch protection rule requiring the `check` job.
 
       - name: ".gitignore"
         content: |

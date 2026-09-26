@@ -43,6 +43,8 @@ var repoCases = map[ri.RepoFlag]repoCase{
 			filepath.Join("cmd", "app", "main.go"), "internal", "pkg",
 			"go.mod", "Makefile", "README.md", "CLAUDE.md", ".gitignore",
 			filepath.Join(".github", "workflows", "ci.yml"),
+			filepath.Join(".github", "workflows", "dependabot-automerge.yml"),
+			filepath.Join(".github", "dependabot.yml"),
 		},
 		wantContents: map[string]func(string) string{
 			"go.mod": func(root string) string { return "module " + filepath.Base(root) + "\n\ngo 1.27\n" },
@@ -607,5 +609,27 @@ func TestRunCommandsInvalidArgTemplate(t *testing.T) {
 				t.Error("RunCommands succeeded, want template error")
 			}
 		})
+	}
+}
+
+// The auto-merge workflow is full of GitHub Actions ${{ }} expressions; it must be written verbatim.
+func TestGoTemplateAutomergeWorkflowIsRaw(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "myrepo")
+	repo, err := ri.NewRepo(ri.GoRepoFlag, root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Init(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "dependabot-automerge.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"${{ secrets.GITHUB_TOKEN }}", "${{ github.event.pull_request.html_url }}"} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("workflow lost %q: expressions were templated", want)
+		}
 	}
 }
