@@ -1,0 +1,115 @@
+---
+name: c_repo
+
+dirs:
+  - path: "src"
+    files:
+      - name: "main.c"
+        content: |
+          #include <stdio.h>
+
+          int main(void) {
+              puts("Hello, World!");
+              return 0;
+          }
+
+  - path: "include"
+    files:
+      - name: ".gitkeep"
+        content: ""
+
+  - path: "./"
+    files:
+      - name: "Makefile"
+        content: |
+          CC       ?= cc
+          CFLAGS   ?= -std=c11 -Wall -Wextra -Wpedantic -O2
+          CPPFLAGS += -Iinclude -MMD -MP
+
+          BUILD  := build
+          TARGET := $(BUILD)/app
+          SRCS   := $(wildcard src/*.c)
+          OBJS   := $(SRCS:src/%.c=$(BUILD)/%.o)
+
+          .PHONY: all run clean
+
+          all: $(TARGET)
+
+          $(TARGET): $(OBJS)
+          	$(CC) $(LDFLAGS) $^ -o $@ $(LDLIBS)
+
+          $(BUILD)/%.o: src/%.c | $(BUILD)
+          	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+
+          $(BUILD):
+          	mkdir -p $@
+
+          run: all
+          	./$(TARGET)
+
+          clean:
+          	rm -rf $(BUILD)
+
+          -include $(OBJS:.o=.d)
+
+      - name: ".clang-format"
+        content: |
+          BasedOnStyle: LLVM
+          IndentWidth: 4
+          ColumnLimit: 100
+
+      - name: "README.md"
+        content: |
+          # {{ .Name }}
+
+          ## Development
+
+          ```sh
+          make        # build build/app
+          make run    # build and run
+          make clean  # remove build output
+          ```
+
+      - name: "CLAUDE.md"
+        content: |
+          # CLAUDE.md
+
+          This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+          ## Commands
+
+          - Build: `make` (outputs `build/app`)
+          - Run: `make run`
+          - Clean: `make clean`
+          - Use another compiler: `make CC=clang`
+          - Format: `clang-format -i src/*.c include/*.h`
+
+          ## Layout
+
+          - `src/`: C sources; every `*.c` file here is compiled and linked automatically
+          - `include/`: headers, on the include path as `-Iinclude`
+          - Dependency files (`*.d`) are generated, so header changes trigger rebuilds
+
+      - name: ".gitignore"
+        content: |
+          # Build output
+          build/
+          *.o
+          *.d
+          *.a
+          *.so
+          *.dylib
+          *.exe
+
+          # Tooling
+          compile_commands.json
+          .cache/
+          *.dSYM/
+          .idea/
+          .vscode/
+          .DS_Store
+
+commands:
+  - name: git
+    args: ["init"]
+    optional: true

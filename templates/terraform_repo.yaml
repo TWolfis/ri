@@ -1,0 +1,228 @@
+---
+name: terraform_repo
+
+dirs:
+  # A reusable module. Add real resources here (or replace it with your own modules).
+  - path: "modules/example"
+    files:
+      - name: "main.tf"
+        content: |
+          # terraform_data needs no provider, so this module works out of the box.
+          resource "terraform_data" "this" {
+            input = {
+              name = var.name
+              tags = var.tags
+            }
+          }
+
+      - name: "variables.tf"
+        content: |
+          variable "name" {
+            description = "Name used for the resources in this module."
+            type        = string
+          }
+
+          variable "tags" {
+            description = "Tags applied to every resource."
+            type        = map(string)
+            default     = {}
+          }
+
+      - name: "outputs.tf"
+        content: |
+          output "name" {
+            description = "Name of the example resource."
+            value       = terraform_data.this.output.name
+          }
+
+  # One tfvars file per environment: terraform plan -var-file=envs/<env>.tfvars
+  - path: "envs"
+    files:
+      - name: "dev.tfvars"
+        content: |
+          environment = "dev"
+
+      - name: "prod.tfvars"
+        content: |
+          environment = "prod"
+
+  - path: "./"
+    files:
+      - name: "versions.tf"
+        content: |
+          terraform {
+            required_version = ">= 1.6"
+
+            # Declare providers here, then run `terraform init`. For example:
+            # required_providers {
+            #   aws = {
+            #     source  = "hashicorp/aws"
+            #     version = "~> 5.0"
+            #   }
+            # }
+
+            # Configure a remote backend before sharing this repository (state is local until then). For example:
+            # backend "s3" {
+            #   bucket = "my-terraform-state"
+            #   key    = "{{ .Name }}/terraform.tfstate"
+            #   region = "eu-west-1"
+            # }
+          }
+
+      - name: "main.tf"
+        content: |
+          locals {
+            name = "${var.project}-${var.environment}"
+          }
+
+          module "example" {
+            source = "./modules/example"
+
+            name = local.name
+            tags = var.tags
+          }
+
+      - name: "variables.tf"
+        content: |
+          variable "project" {
+            description = "Project name, used as a prefix for resource names."
+            type        = string
+            default     = "{{ .Name }}"
+          }
+
+          variable "environment" {
+            description = "Deployment environment (set by envs/<env>.tfvars)."
+            type        = string
+            default     = "dev"
+          }
+
+          variable "tags" {
+            description = "Tags applied to every resource."
+            type        = map(string)
+            default     = {}
+          }
+
+      - name: "outputs.tf"
+        content: |
+          output "name" {
+            description = "Name of the example resource."
+            value       = module.example.name
+          }
+
+      - name: "Makefile"
+        content: |
+          # Environment to plan/apply: make plan ENV=prod
+          ENV ?= dev
+
+          .PHONY: init fmt validate check plan apply destroy
+
+          init:
+          	terraform init
+
+          fmt:
+          	terraform fmt -recursive
+
+          validate: init
+          	terraform validate
+
+          # Formatting and validation, as CI would run them
+          check: validate
+          	terraform fmt -check -recursive
+
+          # Each environment gets its own workspace, so environments do not share state
+          plan: init
+          	terraform workspace select -or-create $(ENV)
+          	terraform plan -var-file=envs/$(ENV).tfvars
+
+          apply: init
+          	terraform workspace select -or-create $(ENV)
+          	terraform apply -var-file=envs/$(ENV).tfvars
+
+          destroy: init
+          	terraform workspace select -or-create $(ENV)
+          	terraform destroy -var-file=envs/$(ENV).tfvars
+
+      - name: "README.md"
+        content: |
+          # {{ .Name }}
+
+          Terraform configuration with a root module, reusable modules and per-environment variable files.
+
+          ```
+          main.tf, variables.tf, outputs.tf, versions.tf   root module
+          modules/                                         reusable modules
+          envs/<env>.tfvars                                per-environment values
+          ```
+
+          ## Usage
+
+          ```sh
+          make init
+          make plan ENV=dev
+          make apply ENV=dev
+          ```
+
+          Each environment uses its own Terraform workspace. Configure a remote backend in `versions.tf`
+          before more than one person works on this repository.
+
+      - name: "CLAUDE.md"
+        content: |
+          # CLAUDE.md
+
+          This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+          ## Commands
+
+          - Initialize: `make init` (`terraform init`)
+          - Validate: `make validate`; format: `make fmt`; both as CI would: `make check`
+          - Plan: `make plan ENV=<env>`; apply: `make apply ENV=<env>` (`ENV` defaults to `dev`)
+          - Show what would change for one module only: `terraform plan -target=module.example -var-file=envs/dev.tfvars`
+
+          ## Layout
+
+          - Root module: `main.tf` wires modules together, `variables.tf` and `outputs.tf` are its interface, `versions.tf` pins Terraform, providers and the backend.
+          - `modules/<name>/`: reusable modules, each with `main.tf`, `variables.tf` and `outputs.tf`.
+          - `envs/<env>.tfvars`: values that differ per environment. Each environment is a Terraform workspace named after it.
+
+          ## Conventions
+
+          - Pin provider versions in `versions.tf` and commit `.terraform.lock.hcl`.
+          - Run `make fmt` before committing; `terraform fmt -check` is part of `make check`.
+          - Never commit state files or secrets. Pass secrets through environment variables (`TF_VAR_...`) or a secrets manager.
+          - Every variable and output has a `description`.
+
+      - name: ".gitignore"
+        content: |
+          # Local state and provider cache (commit .terraform.lock.hcl)
+          .terraform/
+          *.tfstate
+          *.tfstate.*
+          terraform.tfstate.d/
+
+          # Saved plans and logs
+          *.tfplan
+          crash.log
+          crash.*.log
+
+          # Local overrides and secrets
+          override.tf
+          override.tf.json
+          *_override.tf
+          *_override.tf.json
+          *.auto.tfvars
+          .terraformrc
+          terraform.rc
+          .env
+
+          # Tooling
+          .idea/
+          .vscode/
+          .DS_Store
+
+commands:
+  - name: git
+    args: ["init"]
+    optional: true
+  - name: terraform
+    args: ["init"]
+    optional: true

@@ -1,0 +1,132 @@
+---
+name: python_repo
+
+dirs:
+  - path: "src/app"
+    files:
+      - name: "__init__.py"
+        content: ""
+
+      - name: "main.py"
+        content: |
+          def main() -> None:
+              print("Hello, World!")
+
+
+          if __name__ == "__main__":
+              main()
+
+  - path: "tests"
+    files:
+      - name: "test_main.py"
+        content: |
+          from app.main import main
+
+
+          def test_main(capsys):
+              main()
+              assert capsys.readouterr().out == "Hello, World!\n"
+
+  - path: "./"
+    files:
+      - name: "pyproject.toml"
+        content: |
+          [build-system]
+          requires = ["setuptools>=68"]
+          build-backend = "setuptools.build_meta"
+
+          [project]
+          name = "{{ .Name }}"
+          version = "0.1.0"
+          readme = "README.md"
+          requires-python = ">=3.11"
+          dependencies = []
+
+          [dependency-groups]
+          dev = ["pytest", "ruff"]
+
+          [project.scripts]
+          app = "app.main:main"
+
+          [tool.setuptools.packages.find]
+          where = ["src"]
+
+          [tool.pytest.ini_options]
+          testpaths = ["tests"]
+          pythonpath = ["src"]
+
+          [tool.ruff]
+          line-length = 100
+          src = ["src", "tests"]
+
+          [tool.ruff.lint]
+          select = ["E", "F", "I", "UP", "B"]
+
+      - name: "README.md"
+        content: |
+          # {{ .Name }}
+
+          ## Development
+
+          ```sh
+          uv sync          # create .venv and install dependencies
+          uv run pytest    # run the tests
+          uv run ruff check .
+          ```
+
+      - name: "CLAUDE.md"
+        content: |
+          # CLAUDE.md
+
+          This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+          ## Commands
+
+          - Setup: `uv sync` (creates `.venv`, installs the `dev` dependency group)
+          - Add a dependency: `uv add <package>` (`uv add --dev <package>` for dev tools)
+          - Test all: `uv run pytest`
+          - Test a single test: `uv run pytest tests/test_main.py::test_main`
+          - Lint: `uv run ruff check .`
+          - Format: `uv run ruff format .`
+          - Run: `uv run app`
+
+          ## Layout
+
+          - `src/app/`: the package (src layout); tool configuration lives in `pyproject.toml`
+          - `tests/`: pytest tests; `pythonpath = ["src"]` lets them run without installing the package
+
+      - name: ".gitignore"
+        content: |
+          # Bytecode and caches
+          __pycache__/
+          *.py[cod]
+          .pytest_cache/
+          .ruff_cache/
+          .mypy_cache/
+
+          # Virtual environments (uv.lock is intentionally not ignored)
+          .venv/
+          venv/
+
+          # Packaging
+          build/
+          dist/
+          *.egg-info/
+
+          # Coverage
+          .coverage
+          htmlcov/
+
+          # Local environment and tooling
+          .env
+          .idea/
+          .vscode/
+          .DS_Store
+
+commands:
+  - name: git
+    args: ["init"]
+    optional: true
+  - name: uv
+    args: ["sync"]
+    optional: true

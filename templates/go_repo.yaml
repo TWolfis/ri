@@ -1,0 +1,124 @@
+---
+name: go_repo
+
+dirs:
+  - path: "cmd/app"
+    files:
+      - name: "main.go"
+        content: |
+          package main
+
+          import "fmt"
+
+          func main() {
+          	fmt.Println("Hello, World!")
+          }
+
+  - path: "internal"
+    files:
+      - name: ".gitkeep"
+        content: ""
+
+  - path: "pkg"
+    files:
+      - name: ".gitkeep"
+        content: ""
+
+  - path: "./"
+    files:
+      - name: "go.mod"
+        content: |
+          module {{ .Name }}
+
+          go 1.27
+
+      - name: "Makefile"
+        content: |
+          BIN := bin/app
+
+          .PHONY: build run test lint fmt clean
+
+          build:
+          	go build -o $(BIN) ./cmd/app
+
+          run:
+          	go run ./cmd/app
+
+          test:
+          	go test ./...
+
+          lint:
+          	go vet ./...
+
+          fmt:
+          	gofmt -l -w .
+
+          clean:
+          	rm -rf bin
+
+      - name: "README.md"
+        content: |
+          # {{ .Name }}
+
+          ## Development
+
+          ```sh
+          make build   # build bin/app
+          make test    # run all tests
+          make lint    # go vet
+          ```
+
+      - name: "CLAUDE.md"
+        content: |
+          # CLAUDE.md
+
+          This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+          ## Commands
+
+          - Build: `make build` (outputs `bin/app`)
+          - Run: `make run`
+          - Test all: `make test`
+          - Test a single test: `go test -run TestName ./path/to/pkg`
+          - Lint: `make lint` (`go vet ./...`)
+          - Format: `make fmt`
+
+          ## Layout
+
+          - `cmd/app`: program entrypoint
+          - `internal/`: private packages, not importable by other modules
+          - `pkg/`: packages intended to be imported by other modules
+
+      - name: ".gitignore"
+        content: |
+          # Build output
+          bin/
+          dist/
+
+          # Binaries for programs and plugins
+          *.exe
+          *.exe~
+          *.dll
+          *.so
+          *.dylib
+
+          # Test binary, build with `go test -c`
+          *.test
+
+          # Coverage output
+          *.out
+          coverage.html
+
+          # Local environment and tooling
+          .env
+          .idea/
+          .vscode/
+          .DS_Store
+
+commands:
+  - name: git
+    args: ["init"]
+    optional: true
+  - name: go
+    args: ["mod", "tidy"]
+    optional: true

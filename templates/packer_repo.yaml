@@ -1,0 +1,177 @@
+---
+name: packer_repo
+
+dirs:
+  - path: "scripts"
+    files:
+      - name: "provision.sh"
+        content: |
+          #!/usr/bin/env bash
+          # Runs inside the image while it is being built.
+          set -euo pipefail
+
+          export DEBIAN_FRONTEND=noninteractive
+
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl
+          rm -rf /var/lib/apt/lists/*
+
+  - path: "./"
+    files:
+      - name: "packer.pkr.hcl"
+        content: |
+          packer {
+            required_version = ">= 1.10"
+
+            required_plugins {
+              docker = {
+                source  = "github.com/hashicorp/docker"
+                version = ">= 1.0.0"
+              }
+            }
+          }
+
+      - name: "variables.pkr.hcl"
+        content: |
+          variable "base_image" {
+            description = "Image the build starts from."
+            type        = string
+            default     = "ubuntu:24.04"
+          }
+
+          variable "repository" {
+            description = "Repository name for the resulting image."
+            type        = string
+            default     = "{{ .Name }}"
+          }
+
+          variable "tag" {
+            description = "Tag for the resulting image."
+            type        = string
+            default     = "latest"
+          }
+
+      - name: "sources.pkr.hcl"
+        content: |
+          # One source per builder. Add more (amazon-ebs, qemu, ...) and list them in build.pkr.hcl.
+          source "docker" "base" {
+            image  = var.base_image
+            commit = true
+          }
+
+      - name: "build.pkr.hcl"
+        content: |
+          build {
+            name    = "{{ .Name }}"
+            sources = ["source.docker.base"]
+
+            provisioner "shell" {
+              script = "scripts/provision.sh"
+            }
+
+            post-processor "docker-tag" {
+              repository = var.repository
+              tags       = [var.tag]
+            }
+          }
+
+      - name: "example.pkrvars.hcl"
+        content: |
+          # Copy to local.auto.pkrvars.hcl (ignored by git) to override the defaults.
+          base_image = "ubuntu:24.04"
+          tag        = "dev"
+
+      - name: "Makefile"
+        content: |
+          .PHONY: init fmt validate check build
+
+          init:
+          	packer init .
+
+          fmt:
+          	packer fmt .
+
+          validate:
+          	packer validate .
+
+          # Formatting and validation, as CI would run them
+          check:
+          	packer fmt -check .
+          	packer validate .
+
+          build:
+          	packer build .
+
+      - name: "README.md"
+        content: |
+          # {{ .Name }}
+
+          Packer template that builds an image with the Docker builder.
+
+          ```
+          packer.pkr.hcl      required Packer version and plugins
+          variables.pkr.hcl   input variables
+          sources.pkr.hcl     builders
+          build.pkr.hcl       provisioners and post-processors
+          scripts/            provisioning scripts
+          ```
+
+          ## Usage
+
+          ```sh
+          make init      # install plugins
+          make validate
+          make build
+          ```
+
+      - name: "CLAUDE.md"
+        content: |
+          # CLAUDE.md
+
+          This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+          ## Commands
+
+          - Install plugins: `make init` (`packer init .`); required after changing `required_plugins`
+          - Validate: `make validate`; format: `make fmt`; both as CI would: `make check`
+          - Build: `make build`; override a variable: `packer build -var tag=v1 .`
+          - Build one source only: `packer build -only='{{ .Name }}.docker.base' .`
+
+          ## Layout
+
+          - All `*.pkr.hcl` files in the root form one template; Packer reads them together, so the file split is only for readability.
+          - `packer.pkr.hcl`: Packer version and plugin requirements. `variables.pkr.hcl`: inputs. `sources.pkr.hcl`: builders. `build.pkr.hcl`: which sources are built, plus provisioners and post-processors.
+          - `scripts/`: shell scripts run by provisioners.
+
+          ## Conventions
+
+          - Pin plugin versions in `packer.pkr.hcl`.
+          - Keep provisioning in `scripts/`, not inline, so it can be linted and run on its own.
+          - Put credentials in environment variables or a `*.auto.pkrvars.hcl` file, which is gitignored. Mark secret variables `sensitive = true`.
+
+      - name: ".gitignore"
+        content: |
+          # Plugin and build output
+          packer_cache/
+          output-*/
+          manifest.json
+          *.box
+          *.log
+
+          # Local variable files and secrets
+          *.auto.pkrvars.hcl
+          *.auto.pkrvars.json
+          .env
+
+          # Tooling
+          .idea/
+          .vscode/
+          .DS_Store
+
+commands:
+  - name: git
+    args: ["init"]
+    optional: true
+  - name: packer
+    args: ["init", "."]
+    optional: true

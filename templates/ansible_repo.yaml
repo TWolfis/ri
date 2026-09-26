@@ -1,0 +1,153 @@
+---
+name: ansible_repo
+
+dirs:
+  - path: "inventory"
+    files:
+      - name: "hosts.yml"
+        content: |
+          ---
+          all:
+            children:
+              servers:
+                hosts:
+                  example-host:
+                    ansible_host: 192.0.2.10
+
+  - path: "inventory/group_vars"
+    files:
+      - name: "all.yml"
+        content: |
+          ---
+          # Variables applied to every host.
+          ansible_user: ansible
+
+  - path: "inventory/host_vars"
+    files:
+      - name: ".gitkeep"
+        content: ""
+
+  - path: "playbooks"
+    files:
+      - name: "site.yml"
+        content: |
+          ---
+          - name: Apply common configuration
+            hosts: all
+            become: true
+            roles:
+              - common
+
+  - path: "roles/common/tasks"
+    files:
+      - name: "main.yml"
+        raw: true # contains Jinja {{ }}, which must not be templated by ri
+        content: |
+          ---
+          - name: Verify connectivity
+            ansible.builtin.ping:
+
+          - name: Install base packages
+            ansible.builtin.package:
+              name: "{{ common_packages }}"
+              state: present
+
+  - path: "roles/common/defaults"
+    files:
+      - name: "main.yml"
+        content: |
+          ---
+          # Default variables for the common role.
+          common_packages:
+            - git
+            - curl
+
+  - path: "./"
+    files:
+      - name: "ansible.cfg"
+        content: |
+          [defaults]
+          inventory = inventory/hosts.yml
+          roles_path = roles
+          collections_path = .ansible/collections
+          retry_files_enabled = False
+          interpreter_python = auto_silent
+
+      - name: "requirements.yml"
+        content: |
+          ---
+          collections:
+            - name: ansible.posix
+            - name: community.general
+
+      - name: ".ansible-lint"
+        content: |
+          ---
+          profile: moderate
+          exclude_paths:
+            - .ansible/
+
+      - name: "README.md"
+        content: |
+          # {{ .Name }}
+
+          ## Usage
+
+          ```sh
+          ansible-galaxy collection install -r requirements.yml
+          ansible-playbook playbooks/site.yml --check --diff   # dry run
+          ansible-playbook playbooks/site.yml                  # apply
+          ```
+
+      - name: "CLAUDE.md"
+        content: |
+          # CLAUDE.md
+
+          This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+          ## Commands
+
+          - Install collections: `ansible-galaxy collection install -r requirements.yml`
+          - Dry run: `ansible-playbook playbooks/site.yml --check --diff`
+          - Apply: `ansible-playbook playbooks/site.yml`
+          - Limit to a host or group: `ansible-playbook playbooks/site.yml --limit <host-or-group>`
+          - Run one role's tasks by tag: `ansible-playbook playbooks/site.yml --tags <tag>`
+          - Show inventory: `ansible-inventory --graph`
+          - Lint: `ansible-lint`
+
+          ## Layout
+
+          - `ansible.cfg`: default inventory, roles path and collections path
+          - `inventory/`: `hosts.yml` plus `group_vars/` and `host_vars/`
+          - `playbooks/site.yml`: entrypoint that applies roles to hosts
+          - `roles/<name>/{tasks,defaults}`: role content; add `handlers`, `templates`, `files` as needed
+
+          ## Conventions
+
+          - Use fully qualified module names (`ansible.builtin.package`, not `package`)
+          - Secrets belong in ansible-vault files; the vault password file `.vault_pass` is gitignored
+
+      - name: ".gitignore"
+        content: |
+          # Ansible runtime
+          *.retry
+          .ansible/
+
+          # Secrets
+          .vault_pass
+          *.vault_pass
+          .env
+
+          # Tooling
+          .cache/
+          .idea/
+          .vscode/
+          .DS_Store
+
+commands:
+  - name: git
+    args: ["init"]
+    optional: true
+  - name: ansible-galaxy
+    args: ["collection", "install", "-r", "requirements.yml"]
+    optional: true

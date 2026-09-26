@@ -1,0 +1,301 @@
+---
+name: kube_app_repo
+
+# Names become Kubernetes names and namespaces (<name>-dev, <name>-prod): lowercase DNS label, at most 58 characters.
+name_pattern: '^[a-z0-9]([-a-z0-9]{0,56}[a-z0-9])?$'
+
+dirs:
+  # Kustomize base: environment independent manifests.
+  - path: "base"
+    files:
+      - name: "kustomization.yaml"
+        content: |
+          apiVersion: kustomize.config.k8s.io/v1beta1
+          kind: Kustomization
+          resources:
+            - deployment.yaml
+            - service.yaml
+
+      - name: "deployment.yaml"
+        content: |
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: {{ .Name }}
+            labels:
+              app.kubernetes.io/name: {{ .Name }}
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: {{ .Name }}
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: {{ .Name }}
+              spec:
+                securityContext:
+                  runAsNonRoot: true
+                  seccompProfile:
+                    type: RuntimeDefault
+                containers:
+                  - name: {{ .Name }}
+                    # Placeholder image: replace it, and override tags per environment in overlays/*/kustomization.yaml
+                    image: nginxinc/nginx-unprivileged:1.27-alpine
+                    ports:
+                      - name: http
+                        containerPort: 8080
+                    readinessProbe:
+                      httpGet:
+                        path: /
+                        port: http
+                    livenessProbe:
+                      httpGet:
+                        path: /
+                        port: http
+                    resources:
+                      requests:
+                        cpu: 50m
+                        memory: 64Mi
+                      limits:
+                        memory: 128Mi
+                    securityContext:
+                      allowPrivilegeEscalation: false
+                      readOnlyRootFilesystem: true
+                      capabilities:
+                        drop: ["ALL"]
+                    volumeMounts:
+                      - name: tmp
+                        mountPath: /tmp
+                volumes:
+                  - name: tmp
+                    emptyDir: {}
+
+      - name: "service.yaml"
+        content: |
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: {{ .Name }}
+            labels:
+              app.kubernetes.io/name: {{ .Name }}
+          spec:
+            selector:
+              app.kubernetes.io/name: {{ .Name }}
+            ports:
+              - name: http
+                port: 80
+                targetPort: http
+
+  # Kustomize overlays: one directory per environment, each deployed by its own Argo CD Application.
+  - path: "overlays/dev"
+    files:
+      - name: "kustomization.yaml"
+        content: |
+          apiVersion: kustomize.config.k8s.io/v1beta1
+          kind: Kustomization
+          namespace: {{ .Name }}-dev
+          resources:
+            - ../../base
+          labels:
+            - pairs:
+                app.kubernetes.io/environment: dev
+          replicas:
+            - name: {{ .Name }}
+              count: 1
+
+  - path: "overlays/prod"
+    files:
+      - name: "kustomization.yaml"
+        content: |
+          apiVersion: kustomize.config.k8s.io/v1beta1
+          kind: Kustomization
+          namespace: {{ .Name }}-prod
+          resources:
+            - ../../base
+            - pdb.yaml
+          labels:
+            - pairs:
+                app.kubernetes.io/environment: prod
+          replicas:
+            - name: {{ .Name }}
+              count: 3
+
+      - name: "pdb.yaml"
+        content: |
+          apiVersion: policy/v1
+          kind: PodDisruptionBudget
+          metadata:
+            name: {{ .Name }}
+          spec:
+            minAvailable: 1
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: {{ .Name }}
+
+  # Argo CD resources. These are applied once by hand (make bootstrap); after that Argo CD syncs the overlays.
+  - path: "argocd"
+    files:
+      - name: "project.yaml"
+        content: |
+          apiVersion: argoproj.io/v1alpha1
+          kind: AppProject
+          metadata:
+            name: {{ .Name }}
+            namespace: argocd
+          spec:
+            description: {{ .Name }}
+            sourceRepos:
+              # TODO: set to this repository's URL
+              - https://example.com/your-org/{{ .Name }}.git
+            destinations:
+              - server: https://kubernetes.default.svc
+                namespace: {{ .Name }}-*
+            # Needed for CreateNamespace=true in the Applications
+            clusterResourceWhitelist:
+              - group: ""
+                kind: Namespace
+
+  - path: "argocd/applications"
+    files:
+      - name: "dev.yaml"
+        content: |
+          apiVersion: argoproj.io/v1alpha1
+          kind: Application
+          metadata:
+            name: {{ .Name }}-dev
+            namespace: argocd
+            finalizers:
+              - resources-finalizer.argocd.argoproj.io
+          spec:
+            project: {{ .Name }}
+            source:
+              # TODO: set to this repository's URL
+              repoURL: https://example.com/your-org/{{ .Name }}.git
+              targetRevision: HEAD
+              path: overlays/dev
+            destination:
+              server: https://kubernetes.default.svc
+              namespace: {{ .Name }}-dev
+            syncPolicy:
+              automated:
+                prune: true
+                selfHeal: true
+              syncOptions:
+                - CreateNamespace=true
+
+      - name: "prod.yaml"
+        content: |
+          apiVersion: argoproj.io/v1alpha1
+          kind: Application
+          metadata:
+            name: {{ .Name }}-prod
+            namespace: argocd
+            finalizers:
+              - resources-finalizer.argocd.argoproj.io
+          spec:
+            project: {{ .Name }}
+            source:
+              # TODO: set to this repository's URL
+              repoURL: https://example.com/your-org/{{ .Name }}.git
+              targetRevision: HEAD
+              path: overlays/prod
+            destination:
+              server: https://kubernetes.default.svc
+              namespace: {{ .Name }}-prod
+            # No automated sync: production changes are synced manually from Argo CD.
+            syncPolicy:
+              syncOptions:
+                - CreateNamespace=true
+
+  - path: "./"
+    files:
+      - name: "Makefile"
+        content: |
+          ENVS := dev prod
+
+          .PHONY: build validate bootstrap
+
+          # Render every overlay to stdout, failing on the first broken one
+          build:
+          	@for env in $(ENVS); do \
+          		echo "--- overlays/$$env"; \
+          		kubectl kustomize overlays/$$env || exit 1; \
+          	done
+
+          # Schema-check the rendered manifests (requires kubeconform)
+          validate:
+          	@for env in $(ENVS); do \
+          		kubectl kustomize overlays/$$env | kubeconform -strict -summary -ignore-missing-schemas || exit 1; \
+          	done
+
+          # Register the project and applications with Argo CD (once per cluster)
+          bootstrap:
+          	kubectl apply -n argocd -f argocd/project.yaml -f argocd/applications/
+
+      - name: "README.md"
+        content: |
+          # {{ .Name }}
+
+          Kubernetes manifests (Kustomize) deployed with Argo CD.
+
+          ```
+          base/               manifests shared by all environments
+          overlays/dev        dev: namespace {{ .Name }}-dev, auto-sync
+          overlays/prod       prod: namespace {{ .Name }}-prod, manual sync
+          argocd/             AppProject and one Application per environment
+          ```
+
+          ## Getting started
+
+          1. Set the repository URL (`TODO` markers) in `argocd/project.yaml` and `argocd/applications/*.yaml`.
+          2. Replace the placeholder image in `base/deployment.yaml`.
+          3. `make build` to render the overlays, then push the repository.
+          4. `make bootstrap` to hand it to Argo CD.
+
+      - name: "CLAUDE.md"
+        content: |
+          # CLAUDE.md
+
+          This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+          ## Commands
+
+          - Render all overlays: `make build`; one overlay: `kubectl kustomize overlays/<env>`
+          - Schema-check rendered manifests: `make validate` (needs `kubeconform`)
+          - Register with Argo CD: `make bootstrap`
+
+          ## Layout
+
+          - `base/`: environment-independent Deployment and Service. Names and labels come from `app.kubernetes.io/name`.
+          - `overlays/<env>/`: Kustomize overlay per environment. It sets the namespace, environment label, replica count and any image tag override, and may add environment-only resources (prod has a PodDisruptionBudget).
+          - `argocd/project.yaml`: the AppProject, restricted to this repo and the `<name>-*` namespaces.
+          - `argocd/applications/<env>.yaml`: one Argo CD Application per overlay. dev auto-syncs with prune and self-heal; prod is manual.
+
+          ## Conventions
+
+          - Put shared changes in `base/` and environment differences in the overlay; never copy a manifest between overlays.
+          - A new environment needs an overlay directory and a matching Application in `argocd/applications/`. Add it to `ENVS` in the Makefile.
+          - Argo CD applies whatever is on the branch in `targetRevision`, so run `make build` before pushing.
+          - Do not commit secrets. Use an external mechanism (sealed-secrets, external-secrets, sops).
+
+      - name: ".gitignore"
+        content: |
+          # Rendered output
+          rendered/
+          *.rendered.yaml
+
+          # Secrets
+          *.secret.yaml
+          *.key
+          .env
+
+          # Tooling
+          .idea/
+          .vscode/
+          .DS_Store
+
+commands:
+  - name: git
+    args: ["init"]
+    optional: true

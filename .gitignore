@@ -1,0 +1,24 @@
+# Build output (go build -o ri ./cmd/ri)
+/ri
+/bin/
+/dist/
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, build with `go test -c`
+*.test
+
+# Coverage output
+*.out
+coverage.html
+
+# Local environment and tooling
+.env
+.idea/
+.vscode/
+.DS_Store
