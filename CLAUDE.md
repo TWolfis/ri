@@ -28,20 +28,18 @@ The goal of this project is to create a simple tool that initializes a new repos
 - Module path is `github.com/TWolfis/ri`. The `ri` package (repo root) is the library; `cmd/ri` is a thin CLI over `ri.NewRepo`. `main` only calls `run(args, stdout, stderr) int`, which is what `cmd/ri/main_test.go` exercises; errors are printed as `ri: <err>` with exit code 1 (2 for bad usage), never panics.
 - `ri.NewRepo(type, name, yamlFile, opts...)` returns `(IRI, error)`. Options (`WithOverwrite`) are applied through the unexported `IRI.repo()` method, which every repo type gets by embedding `Repo`.
 - `Init` plans first (`Repo.plan`: validates `name_pattern`, renders every file and command arg, no filesystem access), then refuses with `ErrFilesExist` if any target file exists (unless `WithOverwrite`), then writes with `O_EXCL`. Template errors and conflicts therefore never leave a half-written repo. Keep this order when changing `Init`.
-- A repo type is a YAML template (`Repo` in `repo_init.go`: `dirs` -> `files`, plus `commands`). Built-in templates live in `templates/*.yaml` and are `go:embed`ed by one small file per type (`go_repo.go`, `c_repo.go`, ...). `custom` loads a user-supplied YAML file instead.
+- A repo type is a YAML template (`Repo` in `repo_init.go`: `dirs` -> `files`, plus `commands`). Built-in templates live in `internal/templates/<type>_repo.yaml`, embedded by the `internal/templates` package (`//go:embed *.yaml`); `NewRepo` finds one by the flag's `String()` name, so there is no per-type Go code. `custom` loads a user-supplied YAML file instead.
 
 ## Adding a new repository type
 
 There are two ways to add a repo type: a built-in one (compiled in, selected with `-type <name>`) or a user-supplied YAML file (`-type custom -yaml file.yaml`, no code changes). Both use the same YAML schema, described below.
 
-To add a built-in type `foo`:
+To add a built-in type `foo` (no other Go code is needed; `TestTemplatesMatchRepoFlags` fails if a flag and a template do not pair up):
 
-1. `templates/foo_repo.yaml`: the template (schema below). Use `go_repo.yaml` as the reference.
-2. `foo_repo.go`: copy `go_repo.go` and rename (`//go:embed templates/foo_repo.yaml`, `fooRepoData`, `FooRepo`, `newFooRepo`).
-3. `repo_init_flag.go`: add `FooRepoFlag` to the const block **before** `CustomRepoFlag` (and keep `lastRepoFlag` last, since `RepoFlags()` iterates up to it), then add `"foo"` cases to both `String()` and `Set()`.
-4. `repo_init.go`: add a `case FooRepoFlag: repo = newFooRepo(name)` to `NewRepo`. Built-in constructors panic if their embedded template fails to parse; `TestNewRepoInit` guarantees that cannot ship.
-5. `repo_init_test.go`: add an entry for the flag to `repoCases` with the `wantPaths` (and `wantContents` for rendered files) it must create. `TestNewRepoInit` and `TestRepoFlags` fail until this exists.
-6. `go test ./...`, then generate it for real: `go run ./cmd/ri -type foo -name /tmp/foo-proj` and build/run the output. The `-type` help text lists new flags automatically.
+1. `internal/templates/foo_repo.yaml`: the template (schema below). Use `go_repo.yaml` as the reference. The file name must be exactly `<flag name>_repo.yaml`.
+2. `repo_init_flag.go`: add `FooRepoFlag` to the const block **before** `CustomRepoFlag` (and keep `lastRepoFlag` last, since `RepoFlags()` iterates up to it), then add `"foo"` cases to both `String()` and `Set()`.
+3. `repo_init_test.go`: add an entry for the flag to `repoCases` with the `wantPaths` (and `wantContents` for rendered files) it must create. `TestNewRepoInit` and `TestRepoFlags` fail until this exists.
+4. `go test ./...`, then generate it for real: `go run ./cmd/ri -type foo -name /tmp/foo-proj` and build/run the output. The `-type` help text lists new flags automatically.
 
 ### Template schema
 

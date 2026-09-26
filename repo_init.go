@@ -11,6 +11,8 @@ import (
 	"text/template"
 
 	"go.yaml.in/yaml/v2"
+
+	"github.com/TWolfis/ri/internal/templates"
 )
 
 // ErrFilesExist is returned (wrapped) by Init when files it would create already exist.
@@ -24,9 +26,6 @@ type IRI interface {
 
 	// RunCommands runs the template's commands inside the created repository. Call it after Init.
 	RunCommands() error
-
-	// repo gives NewRepo access to the underlying Repo to apply Options.
-	repo() *Repo
 }
 
 // Option customizes a repository created by NewRepo.
@@ -37,38 +36,36 @@ func WithOverwrite() Option {
 	return func(r *Repo) { r.overwrite = true }
 }
 
-// NewRepo creates a new repository of the specified type (Go, C, Python, Ansible, KubeApp, Terraform, Packer or Custom) with the given name and optional YAML file for custom repositories.
+// NewRepo creates a new repository of the given type with the given name. Built-in types come from
+// the templates embedded in this module; for CustomRepoFlag the template is read from yamlFile.
 func NewRepo(repoType RepoFlag, name string, yamlFile *string, opts ...Option) (IRI, error) {
-	var repo IRI
-	switch repoType {
-	case GoRepoFlag:
-		repo = newGoRepo(name)
-	case CRepoFlag:
-		repo = newCRepo(name)
-	case PythonRepoFlag:
-		repo = newPythonRepo(name)
-	case AnsibleRepoFlag:
-		repo = newAnsibleRepo(name)
-	case KubeAppRepoFlag:
-		repo = newKubeAppRepo(name)
-	case TerraformRepoFlag:
-		repo = newTerraformRepo(name)
-	case PackerRepoFlag:
-		repo = newPackerRepo(name)
-	case CustomRepoFlag:
+	var repo *Repo
+	switch {
+	case repoType < 0 || repoType >= lastRepoFlag:
+		return nil, fmt.Errorf("invalid repo type %d", int(repoType))
+
+	case repoType == CustomRepoFlag:
 		if yamlFile == nil || *yamlFile == "" {
 			return nil, errors.New("a YAML file is required for the custom repo type")
 		}
 		var err error
-		if repo, err = newCustomRepo(name, *yamlFile); err != nil {
+		if repo, err = FromYamlFile(*yamlFile); err != nil {
+			return nil, fmt.Errorf("loading %s: %w", *yamlFile, err)
+		}
+
+	default:
+		data, err := templates.Get(repoType.String())
+		if err != nil {
 			return nil, err
 		}
-	default:
-		return nil, fmt.Errorf("invalid repo type %d", int(repoType))
+		if repo, err = FromYAML(data); err != nil {
+			return nil, fmt.Errorf("built-in %s template: %w", repoType, err)
+		}
 	}
 
+	repo.Name = name
 	for _, opt := range opts {
-		opt(repo.repo())
+		opt(repo)
 	}
 	return repo, nil
 }
@@ -90,8 +87,6 @@ type Repo struct {
 	// overwrite lets Init replace existing files.
 	overwrite bool
 }
-
-func (r *Repo) repo() *Repo { return r }
 
 // Directory is a directory to create, together with the files that go in it.
 type Directory struct {

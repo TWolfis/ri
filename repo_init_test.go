@@ -256,8 +256,11 @@ func TestNewRepoCustomErrors(t *testing.T) {
 }
 
 func TestNewRepoInvalidFlag(t *testing.T) {
-	if _, err := ri.NewRepo(ri.RepoFlag(-1), "x", nil); err == nil {
-		t.Error("NewRepo with invalid flag succeeded, want error")
+	// -1 is below the first flag, 99 is past the last (including the unexported sentinel)
+	for _, f := range []ri.RepoFlag{-1, 99} {
+		if _, err := ri.NewRepo(f, "x", nil); err == nil {
+			t.Errorf("NewRepo(%d) succeeded, want error", int(f))
+		}
 	}
 }
 
