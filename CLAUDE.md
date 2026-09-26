@@ -76,6 +76,15 @@ Conventions for built-in templates: include `README.md`, `CLAUDE.md` (with the p
 - zsh: `_path_files -g ... -/` is used for YAML files because `_files -g` falls back to offering every file when nothing matches.
 - `completion_test.go` checks syntax with `bash -n`/`zsh -n` and runs the bash function for real; these tests skip if the shell is not installed. There is no automated zsh functional test (it needs a pty); after changing the zsh template, try it by hand.
 
+## Releasing
+
+Releases are automated with [release-please](https://github.com/googleapis/release-please) (`.github/workflows/release-please.yml`, `release-please-config.json`, `.release-please-manifest.json`). It keeps one release PR open on `main`; merging that PR updates `CHANGELOG.md`, tags `vX.Y.Z` and publishes the GitHub release. Nothing is released until you merge it. Do not edit `CHANGELOG.md` or the manifest by hand.
+
+- **Commit messages must be Conventional Commits**, because the version comes from them. With squash merges the PR title becomes the commit message, so write PR titles that way. `feat:` bumps the minor version, `fix:` the patch version, and a breaking change (`feat!:` or a `BREAKING CHANGE:` footer) also bumps the minor version while the project is 0.x (`bump-minor-pre-major`). `docs:`, `test:`, `refactor:`, `chore:` and `ci:` are allowed but never trigger a release on their own.
+- **Dependabot:** Go module updates are committed as `fix(deps): ...`, so they show up in the next release. GitHub Actions updates are `ci: ...` and do not (they do not change the binary).
+- **CI on the release PR:** PRs created with the default `GITHUB_TOKEN` do not trigger workflows, so the release-please workflow runs `ci.yml` on the release branch through `workflow_dispatch` (which is why `ci.yml` has that trigger). If the required `check` status ever fails to appear on a release PR, that step is the place to look.
+- Existing tags up to `v0.3.0` were written by hand; the manifest starts at `0.3.0`.
+
 ## Templating
 
 - File `content` and command `args` are executed as `text/template`; the YAML itself is not. Directory paths and file names are not templated.
