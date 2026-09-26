@@ -42,6 +42,7 @@ var repoCases = map[ri.RepoFlag]repoCase{
 		wantPaths: []string{
 			filepath.Join("cmd", "app", "main.go"), "internal", "pkg",
 			"go.mod", "Makefile", "README.md", "CLAUDE.md", ".gitignore",
+			filepath.Join(".github", "workflows", "ci.yml"),
 		},
 		wantContents: map[string]func(string) string{
 			"go.mod": func(root string) string { return "module " + filepath.Base(root) + "\n\ngo 1.27\n" },

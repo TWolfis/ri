@@ -24,6 +24,28 @@ dirs:
       - name: ".gitkeep"
         content: ""
 
+  - path: ".github/workflows"
+    files:
+      - name: "ci.yml"
+        content: |
+          name: CI
+
+          on:
+            push:
+              branches: [main]
+            pull_request:
+
+          jobs:
+            check:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                - uses: actions/setup-go@v5
+                  with:
+                    go-version-file: go.mod
+                - name: gofmt, vet and tests
+                  run: make check
+
   - path: "./"
     files:
       - name: "go.mod"
@@ -36,7 +58,7 @@ dirs:
         content: |
           BIN := bin/app
 
-          .PHONY: build run test lint fmt clean
+          .PHONY: build run test lint fmt check clean
 
           build:
           	go build -o $(BIN) ./cmd/app
@@ -53,6 +75,11 @@ dirs:
           fmt:
           	gofmt -l -w .
 
+          # Formatting, vet and tests: what CI runs
+          check:
+          	@test -z "$$(gofmt -l .)" || (echo "gofmt needed:"; gofmt -l .; exit 1)
+          	$(MAKE) lint test
+
           clean:
           	rm -rf bin
 
@@ -66,6 +93,7 @@ dirs:
           make build   # build bin/app
           make test    # run all tests
           make lint    # go vet
+          make check   # gofmt, vet and tests (what CI runs)
           ```
 
       - name: "CLAUDE.md"
@@ -82,12 +110,14 @@ dirs:
           - Test a single test: `go test -run TestName ./path/to/pkg`
           - Lint: `make lint` (`go vet ./...`)
           - Format: `make fmt`
+          - Everything CI checks (gofmt, vet, tests): `make check`
 
           ## Layout
 
           - `cmd/app`: program entrypoint
           - `internal/`: private packages, not importable by other modules
           - `pkg/`: packages intended to be imported by other modules
+          - `.github/workflows/ci.yml`: CI, runs `make check` on pushes to `main` and on pull requests
 
       - name: ".gitignore"
         content: |

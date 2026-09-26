@@ -31,7 +31,7 @@ ri -list-types
 
 | Type | Creates | Runs |
 |---|---|---|
-| `go` | `cmd/app`, `internal`, `pkg`, `go.mod`, Makefile | `git init`, `go mod tidy` |
+| `go` | `cmd/app`, `internal`, `pkg`, `go.mod`, Makefile, GitHub Actions CI | `git init`, `go mod tidy` |
 | `c` | `src`, `include`, Makefile with dependency tracking, `.clang-format` | `git init` |
 | `python` | `src/app`, `tests`, `pyproject.toml` (uv, pytest, ruff) | `git init`, `uv sync` |
 | `ansible` | inventory, playbook, `common` role, `ansible.cfg` | `git init`, `ansible-galaxy collection install` |
