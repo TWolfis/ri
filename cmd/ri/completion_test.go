@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -87,6 +88,12 @@ func TestZshEscape(t *testing.T) {
 	}
 }
 
+// compoptStub stands in for bash's compopt builtin, which only works inside a real completion
+// session: bash 4+ complains when it is called anywhere else (as it is when a test calls the
+// completion function directly), and bash 3.2 (macOS) has no compopt at all. This no-op behaves
+// like compopt does during a real completion, and makes every bash version take the same code path.
+const compoptStub = "compopt() { :; }\n"
+
 // Runs the bash script for real: sets up a completion context and calls the completion function.
 func TestBashCompletionResults(t *testing.T) {
 	bash, err := exec.LookPath("bash")
@@ -115,13 +122,18 @@ func TestBashCompletionResults(t *testing.T) {
 		for i, w := range words {
 			quoted[i] = "'" + w + "'"
 		}
-		driver := script + "\nCOMP_WORDS=(" + strings.Join(quoted, " ") + ")\n" +
+		driver := compoptStub + script + "\nCOMP_WORDS=(" + strings.Join(quoted, " ") + ")\n" +
 			"COMP_CWORD=" + string(rune('0'+len(words)-1)) + "\n_ri\nprintf '%s\\n' \"${COMPREPLY[@]}\"\n"
-		out, err := exec.Command(bash, "-c", driver).CombinedOutput()
-		if err != nil {
-			t.Fatalf("bash failed: %v\n%s", err, out)
+		var stdout, stderr bytes.Buffer
+		cmd := exec.Command(bash, "-c", driver)
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("bash failed: %v\n%s", err, stderr.String())
 		}
-		return strings.FieldsFunc(string(out), func(r rune) bool { return r == '\n' })
+		if stderr.Len() > 0 {
+			t.Errorf("complete %q wrote to stderr: %s", words, stderr.String())
+		}
+		return strings.FieldsFunc(stdout.String(), func(r rune) bool { return r == '\n' })
 	}
 
 	tests := []struct {
