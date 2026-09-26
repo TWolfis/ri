@@ -26,6 +26,20 @@ ri -list-types
 | `-skip-commands` | Only create files; do not run the template's commands. |
 | `-force` | Overwrite files that already exist. Without it `ri` refuses, and writes nothing. |
 | `-list-types` | Print the supported types. |
+| `-completion` | Print a shell completion script (`bash` or `zsh`). |
+
+## Shell completion
+
+Completion covers the flags, the repo types, shell names, directories for `-name` and YAML files for `-yaml`. The scripts are generated from the CLI itself, so they always match the installed version.
+
+```sh
+# bash: add to ~/.bashrc
+eval "$(ri -completion bash)"
+
+# zsh: add to ~/.zshrc, after compinit
+source <(ri -completion zsh)
+# or install it once: ri -completion zsh > "${fpath[1]}/_ri"
+```
 
 ## Types
 

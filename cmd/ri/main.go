@@ -25,6 +25,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		skipCommands bool
 		force        bool
 		listTypes    bool
+		completion   string
 	)
 
 	fs := flag.NewFlagSet("ri", flag.ContinueOnError)
@@ -39,6 +40,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(&skipCommands, "skip-commands", false, "Only create files; do not run the template's commands (git init, uv sync, ...)")
 	fs.BoolVar(&force, "force", false, "Overwrite files that already exist")
 	fs.BoolVar(&listTypes, "list-types", false, "List all supported repository types")
+	fs.StringVar(&completion, "completion", "", "Print a shell completion script ("+strings.Join(completionShells, " or ")+")")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -52,12 +54,22 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+
+	if set["completion"] {
+		script, err := completionScript(completion, fs, typeList())
+		if err != nil {
+			return usageError(fs, stderr, "%v", err)
+		}
+		fmt.Fprint(stdout, script)
+		return 0
+	}
+
 	if fs.NArg() > 0 {
 		return usageError(fs, stderr, "unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 
-	set := map[string]bool{}
-	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
 	if !set["type"] {
 		return usageError(fs, stderr, "-type is required (%s)", typeNames())
 	}
@@ -96,11 +108,16 @@ func usageError(fs *flag.FlagSet, stderr io.Writer, format string, args ...any) 
 	return 2
 }
 
-// typeNames lists every supported repository type for help text.
-func typeNames() string {
+// typeList returns every supported repository type.
+func typeList() []string {
 	var names []string
 	for f := range ri.RepoFlags() {
 		names = append(names, f.String())
 	}
-	return strings.Join(names, ", ")
+	return names
+}
+
+// typeNames lists every supported repository type for help text.
+func typeNames() string {
+	return strings.Join(typeList(), ", ")
 }
