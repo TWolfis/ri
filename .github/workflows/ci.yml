@@ -16,3 +16,14 @@ jobs:
           go-version-file: go.mod
       - name: gofmt, vet and tests
         run: make check
+
+      - name: Coverage
+        run: make cover
+
+      # Needs a CODECOV_TOKEN repository secret. Without it (or on pull requests that cannot read secrets,
+      # such as Dependabot's) the upload fails quietly and does not fail the build.
+      - uses: codecov/codecov-action@v5
+        with:
+          files: coverage.out
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
