@@ -1,6 +1,6 @@
 BIN := bin/ri
 
-.PHONY: build install run test cover vet fmt check clean
+.PHONY: build install run test vet fmt check clean
 
 build:
 	go build -o $(BIN) ./cmd/ri
@@ -14,11 +14,6 @@ run:
 
 test:
 	go test ./...
-
-# Writes coverage.out (uploaded to Codecov by CI) and prints the total
-cover:
-	go test -covermode=atomic -coverprofile=coverage.out ./...
-	go tool cover -func=coverage.out | tail -1
 
 vet:
 	go vet ./...

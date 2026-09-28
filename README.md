@@ -1,7 +1,6 @@
 # ri
 
 [![CI](https://github.com/TWolfis/ri/actions/workflows/ci.yml/badge.svg)](https://github.com/TWolfis/ri/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/TWolfis/ri/branch/main/graph/badge.svg)](https://codecov.io/gh/TWolfis/ri)
 [![Go Reference](https://pkg.go.dev/badge/github.com/TWolfis/ri.svg)](https://pkg.go.dev/github.com/TWolfis/ri)
 [![Release](https://img.shields.io/github/v/release/TWolfis/ri)](https://github.com/TWolfis/ri/releases)
 [![License: MIT](https://img.shields.io/github/license/TWolfis/ri)](LICENSE)
