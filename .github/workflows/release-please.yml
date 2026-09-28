@@ -3,6 +3,10 @@ name: Release Please
 # Keeps a release pull request open on main. It collects the Conventional Commits merged since the last
 # release, proposes the next version and a CHANGELOG.md entry, and merging it tags and publishes the release.
 # Nothing is released until that pull request is merged.
+#
+# The release PR is opened by the github-actions bot, which the repository's Actions policy treats as a
+# first-time contributor, so its CI run waits for approval: click "Approve and run workflows" on the PR,
+# wait for the required "check" job to pass, then merge.
 
 on:
   push:
@@ -11,24 +15,12 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  actions: write
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v5
-        id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-
-      # Pull requests opened with the default GITHUB_TOKEN do not trigger workflows, so the required
-      # "check" job would never run on the release PR and it could not be merged normally. Events from
-      # workflow_dispatch are an exception, so run CI on the release branch explicitly.
-      - name: Run CI on the release pull request
-        if: steps.release.outputs.pr != ''
-        run: gh workflow run ci.yml --ref "$(jq -r .headBranchName <<<"$PR")"
-        env:
-          PR: ${{ steps.release.outputs.pr }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

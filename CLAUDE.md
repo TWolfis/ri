@@ -82,7 +82,7 @@ Releases are automated with [release-please](https://github.com/googleapis/relea
 
 - **Commit messages must be Conventional Commits**, because the version comes from them. With squash merges the PR title becomes the commit message, so write PR titles that way. `feat:` bumps the minor version, `fix:` the patch version, and a breaking change (`feat!:` or a `BREAKING CHANGE:` footer) also bumps the minor version while the project is 0.x (`bump-minor-pre-major`). `docs:`, `test:`, `refactor:`, `chore:` and `ci:` are allowed but never trigger a release on their own.
 - **Dependabot:** Go module updates are committed as `fix(deps): ...`, so they show up in the next release. GitHub Actions updates are `ci: ...` and do not (they do not change the binary).
-- **CI on the release PR:** PRs created with the default `GITHUB_TOKEN` do not trigger workflows, so the release-please workflow runs `ci.yml` on the release branch through `workflow_dispatch` (which is why `ci.yml` has that trigger). If the required `check` status ever fails to appear on a release PR, that step is the place to look.
+- **Releasing by hand-approval:** the release PR is opened by the `github-actions` bot, which the repo's Actions policy (`first_time_contributors`) treats as a first-time contributor, so its CI run sits at `action_required` and the required `check` never reports. To release: open the release PR, click "Approve and run workflows", wait for `check` to pass, then merge. A `workflow_dispatch` run of `ci.yml` does not satisfy the required check (it was tried), and a personal access token for the action would avoid the approval but was deliberately not set up.
 - Existing tags up to `v0.3.0` were written by hand; the manifest starts at `0.3.0`.
 
 ## Templating
