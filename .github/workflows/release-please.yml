@@ -28,7 +28,7 @@ jobs:
       # workflow_dispatch are an exception, so run CI on the release branch explicitly.
       - name: Run CI on the release pull request
         if: steps.release.outputs.pr != ''
-        run: gh workflow run ci.yml --ref "$BRANCH"
+        run: gh workflow run ci.yml --ref "$(jq -r .headBranchName <<<"$PR")"
         env:
-          BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          PR: ${{ steps.release.outputs.pr }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
